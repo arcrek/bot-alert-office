@@ -3,8 +3,13 @@ services:
     image: nguyendangdat/bot-alert-office:latest
     container_name: office-telegram-bot
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      - GOOGLE_SHEET_NAME=${GOOGLE_SHEET_NAME:-SLOT OFFICE TRIAL}
+      - GOOGLE_CREDENTIALS_PATH=${GOOGLE_CREDENTIALS_PATH:-./credentials/google_credentials.json}
+      - TIMEZONE=${TIMEZONE:-Asia/Bangkok}
+      - CHECK_INTERVAL_MINUTES=${CHECK_INTERVAL_MINUTES:-15}
     volumes:
       - ./credentials:/app/credentials:ro
       - ./data:/app/data
@@ -32,4 +37,3 @@ services:
 networks:
   bot-network:
     driver: bridge
-
