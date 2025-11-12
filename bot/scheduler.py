@@ -35,14 +35,32 @@ class AlertScheduler:
         for group_id in self.whitelisted_groups:
             for alert in alerts:
                 try:
+                    email = alert['email']
+                    
+                    # Delete old messages for this email in this group
+                    old_message_ids = self.alert_manager.get_old_messages_for_email(email, group_id)
+                    for old_msg_id in old_message_ids:
+                        try:
+                            await self.bot_application.bot.delete_message(chat_id=group_id, message_id=old_msg_id)
+                            self.alert_manager.remove_message_tracking(old_msg_id)
+                            logger.info(f"Deleted old message {old_msg_id} for email {email} in group {group_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete old message {old_msg_id}: {e}")
+                    
+                    # Send new alert message
                     message_text = self.alert_manager.format_alert_message(alert)
                     sent_message = await self.bot_application.bot.send_message(
                         chat_id=group_id,
                         text=message_text,
                         parse_mode='Markdown'
                     )
-                    self.alert_manager.track_alert_message(sent_message.message_id, alert['row_index'])
-                    logger.info(f"Alert sent to group {group_id} for row {alert['row_index']}")
+                    self.alert_manager.track_alert_message(
+                        sent_message.message_id, 
+                        alert['row_index'],
+                        email,
+                        group_id
+                    )
+                    logger.info(f"Alert sent to group {group_id} for row {alert['row_index']}, email {email}")
                 except Exception as e:
                     logger.error(f"Error sending alert to group {group_id}: {e}")
     

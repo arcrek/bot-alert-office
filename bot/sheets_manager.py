@@ -3,7 +3,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from typing import List, Dict, Optional, Tuple
-from bot.config import GOOGLE_CREDENTIALS_PATH, GOOGLE_SHEET_ID
+from bot.config import GOOGLE_CREDENTIALS_PATH, GOOGLE_SHEET_ID, GOOGLE_SHEET_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +16,20 @@ class SheetsManager:
         )
         self.service = build('sheets', 'v4', credentials=self.credentials)
         self.spreadsheet_id = GOOGLE_SHEET_ID
+        self.sheet_name = GOOGLE_SHEET_NAME
         
     def get_sheet_data(self, range_name: str = 'A:I') -> List[List[str]]:
         try:
+            # Add sheet name to range if not already included
+            if '!' not in range_name:
+                range_name = f"'{self.sheet_name}'!{range_name}"
+            
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name
             ).execute()
             values = result.get('values', [])
-            logger.info(f"Retrieved {len(values)} rows from sheet")
+            logger.info(f"Retrieved {len(values)} rows from sheet '{self.sheet_name}'")
             return values
         except HttpError as error:
             logger.error(f"Error fetching sheet data: {error}")
@@ -32,7 +37,7 @@ class SheetsManager:
     
     def get_row_data(self, row_index: int) -> Optional[Dict[str, str]]:
         try:
-            range_name = f'A{row_index}:I{row_index}'
+            range_name = f"'{self.sheet_name}'!A{row_index}:I{row_index}"
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name
@@ -64,11 +69,11 @@ class SheetsManager:
             
             data = [
                 {
-                    'range': f'G{row_index}',
+                    'range': f"'{self.sheet_name}'!G{row_index}",
                     'values': [[date_value]]
                 },
                 {
-                    'range': f'I{row_index}',
+                    'range': f"'{self.sheet_name}'!I{row_index}",
                     'values': [[time_value]]
                 }
             ]

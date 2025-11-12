@@ -6,6 +6,7 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 GOOGLE_SHEET_ID = os.getenv('GOOGLE_SHEET_ID')
+GOOGLE_SHEET_NAME = os.getenv('GOOGLE_SHEET_NAME', 'SLOT OFFICE TRIAL')
 GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', './credentials/google_credentials.json')
 TIMEZONE = pytz.timezone(os.getenv('TIMEZONE', 'Asia/Bangkok'))
 CHECK_INTERVAL_MINUTES = int(os.getenv('CHECK_INTERVAL_MINUTES', '15'))

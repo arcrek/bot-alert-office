@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from bot.config import TIMEZONE
 from bot.sheets_manager import SheetsManager
 
@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 class AlertManager:
     def __init__(self, sheets_manager: SheetsManager):
         self.sheets_manager = sheets_manager
-        self.alert_tracking = {}
+        self.alert_tracking = {}  # message_id -> row_index
+        self.email_messages = {}  # email -> [(chat_id, message_id)]
     
     def check_for_alerts(self) -> List[Dict[str, any]]:
         alerts = []
@@ -91,10 +92,49 @@ class AlertManager:
         
         return success
     
-    def track_alert_message(self, message_id: int, row_index: int):
+    def track_alert_message(self, message_id: int, row_index: int, email: str, chat_id: int):
         self.alert_tracking[message_id] = row_index
-        logger.info(f"Tracking alert message {message_id} for row {row_index}")
+        
+        # Track message by email for duplicate detection
+        if email not in self.email_messages:
+            self.email_messages[email] = []
+        self.email_messages[email].append((chat_id, message_id))
+        
+        logger.info(f"Tracking alert message {message_id} for row {row_index}, email {email}, chat {chat_id}")
     
     def get_row_from_message(self, message_id: int) -> Optional[int]:
         return self.alert_tracking.get(message_id)
+    
+    def get_email_from_row(self, row_index: int) -> Optional[str]:
+        """Get email address for a given row index from the tracking data"""
+        for message_id, tracked_row in self.alert_tracking.items():
+            if tracked_row == row_index:
+                # Find email from email_messages
+                for email, messages in self.email_messages.items():
+                    for chat_id, msg_id in messages:
+                        if msg_id == message_id:
+                            return email
+        return None
+    
+    def get_old_messages_for_email(self, email: str, chat_id: int) -> List[int]:
+        """Get all message IDs for a given email in a specific chat"""
+        if email not in self.email_messages:
+            return []
+        
+        message_ids = [msg_id for cid, msg_id in self.email_messages[email] if cid == chat_id]
+        return message_ids
+    
+    def remove_message_tracking(self, message_id: int):
+        """Remove a message from tracking"""
+        # Remove from alert_tracking
+        row_index = self.alert_tracking.pop(message_id, None)
+        
+        # Remove from email_messages
+        for email, messages in list(self.email_messages.items()):
+            self.email_messages[email] = [(cid, mid) for cid, mid in messages if mid != message_id]
+            if not self.email_messages[email]:
+                del self.email_messages[email]
+        
+        if row_index:
+            logger.info(f"Removed tracking for message {message_id} (row {row_index})")
 

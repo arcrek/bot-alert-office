@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import asyncio
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -93,26 +94,57 @@ class BotHandlers:
             await update.message.reply_text(f"Failed to renew for {email}. Please try again.")
     
     async def check_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("Running manual check...")
+        status_message = await update.message.reply_text("Running manual check...")
         
         alerts = self.alert_manager.check_for_alerts()
         
         if not alerts:
-            await update.message.reply_text("No alerts found.")
+            no_alerts_message = await update.message.reply_text("No alerts found.")
+            # Delete status messages after 2 seconds
+            try:
+                await asyncio.sleep(2)
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=status_message.message_id)
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=no_alerts_message.message_id)
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete status messages: {e}")
             return
         
         chat_id = update.effective_chat.id
         
         for alert in alerts:
+            email = alert['email']
+            
+            # Delete old messages for this email in this chat
+            old_message_ids = self.alert_manager.get_old_messages_for_email(email, chat_id)
+            for old_msg_id in old_message_ids:
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=old_msg_id)
+                    self.alert_manager.remove_message_tracking(old_msg_id)
+                    logger.info(f"Deleted old message {old_msg_id} for email {email}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete old message {old_msg_id}: {e}")
+            
+            # Send new alert message
             message_text = self.alert_manager.format_alert_message(alert)
             sent_message = await context.bot.send_message(
                 chat_id=chat_id,
                 text=message_text,
                 parse_mode='Markdown'
             )
-            self.alert_manager.track_alert_message(sent_message.message_id, alert['row_index'])
+            self.alert_manager.track_alert_message(
+                sent_message.message_id, 
+                alert['row_index'],
+                email,
+                chat_id
+            )
         
-        await update.message.reply_text(f"Sent {len(alerts)} alert(s).")
+        # Delete status messages after sending alerts
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=status_message.message_id)
+            await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete status messages: {e}")
     
     async def handle_done_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message
@@ -135,11 +167,31 @@ class BotHandlers:
         
         if success:
             now = datetime.now(TIMEZONE)
-            await message.reply_text(
-                f"Renewal confirmed!\n"
+            confirmation = await message.reply_text(
+                f"✅ Renewal confirmed!\n"
                 f"Updated at: {now.strftime('%Y-%m-%d %H:%M:%S')}"
             )
             logger.info(f"Renewal via 'done' reply for row {row_index}")
+            
+            # Delete the alert message and user's "done" reply after 2 seconds
+            try:
+                await asyncio.sleep(2)
+                await context.bot.delete_message(
+                    chat_id=message.chat_id,
+                    message_id=replied_message_id
+                )
+                self.alert_manager.remove_message_tracking(replied_message_id)
+                await context.bot.delete_message(
+                    chat_id=message.chat_id,
+                    message_id=message.message_id
+                )
+                await context.bot.delete_message(
+                    chat_id=message.chat_id,
+                    message_id=confirmation.message_id
+                )
+                logger.info(f"Deleted alert message {replied_message_id} and reply messages after 'done'")
+            except Exception as e:
+                logger.warning(f"Failed to delete messages: {e}")
         else:
             await message.reply_text("Failed to update. Please try again or use /renew command.")
     
