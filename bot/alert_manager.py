@@ -42,7 +42,7 @@ class AlertManager:
                 except (ValueError, TypeError):
                     continue
                 
-                if h_value <= 0 and i_time < current_time_str:
+                if h_value < 0 or (h_value == 0 and i_time < current_time_str):
                     alert = {
                         'row_index': idx,
                         'email': email,

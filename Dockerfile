@@ -23,10 +23,13 @@ WORKDIR /app
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
+    && cp /usr/share/zoneinfo/Asia/Bangkok /etc/localtime \
+    && echo "Asia/Bangkok" > /etc/timezone \
     && rm -rf /var/cache/apk/*
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV TZ=Asia/Bangkok
 
 RUN addgroup -g 1000 botuser && \
     adduser -D -u 1000 -G botuser botuser
