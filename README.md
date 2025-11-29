@@ -176,6 +176,20 @@ docker-compose down
 docker-compose restart
 ```
 
+#### Important: Data Directory Permissions
+
+When deploying with Docker (especially on Linux or via Portainer), ensure the `data` directory has correct permissions:
+
+```bash
+# Set ownership to UID 1000 (matches container user)
+sudo chown -R 1000:1000 ./data
+
+# Set appropriate permissions
+chmod -R 755 ./data
+```
+
+Without these permissions, the bot won't be able to save whitelisted groups to `data/whitelist.json`.
+
 **See [DOCKER_SECURITY.md](DOCKER_SECURITY.md) for detailed security features and best practices.**
 
 ### Option 2: Local Python Deployment
@@ -330,7 +344,45 @@ Look for error messages about missing environment variables or invalid credentia
 **Port Already in Use:**
 This bot doesn't expose ports, so this shouldn't be an issue.
 
-**Permission Errors:**
+**Data Volume Permission Errors (Docker/Portainer):**
+
+If the bot can't save changes to `whitelist.json` when running in Docker (especially with Portainer stacks), it's likely a permission issue:
+
+**Problem:** The container runs as user `botuser` (UID 1000, GID 1000) but the host directory doesn't have write permissions.
+
+**Solution on Linux host:**
+```bash
+# Navigate to your project directory
+cd /path/to/bot-alert-office
+
+# Create data directory if it doesn't exist
+mkdir -p data
+
+# Create initial whitelist.json
+cat > data/whitelist.json << 'EOF'
+{
+  "group_ids": []
+}
+EOF
+
+# Set correct ownership (UID:GID 1000:1000)
+sudo chown -R 1000:1000 data
+
+# Set appropriate permissions
+chmod -R 755 data
+chmod 644 data/whitelist.json
+```
+
+**Verify permissions:**
+```bash
+ls -la data/
+# Should show: drwxr-xr-x 2 1000 1000 ... for directory
+#              -rw-r--r-- 1 1000 1000 ... for whitelist.json
+```
+
+**Note:** The docker-compose files include `:rw` flag on the data volume mount to ensure it's writable even when the container filesystem is read-only for security.
+
+**General Permission Errors:**
 ```bash
 sudo chown -R $USER:$USER ./data ./credentials
 ```
