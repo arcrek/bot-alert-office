@@ -60,6 +60,57 @@ class AlertManager:
             logger.error(f"Error checking for alerts: {error}")
             return []
     
+    def check_for_daily_summary(self) -> List[Dict[str, any]]:
+        """Check for all expired accounts (H <= 0) regardless of time for daily summary"""
+        alerts = []
+        try:
+            data = self.sheets_manager.get_sheet_data('A:I')
+            current_time = datetime.now(TIMEZONE)
+            current_time_str = current_time.strftime('%H:%M:%S')
+            
+            logger.info(f"Running daily summary check for {len(data)} rows at {current_time_str}")
+            
+            for idx, row in enumerate(data, start=1):
+                if idx == 1:
+                    continue
+                
+                if len(row) < 9:
+                    continue
+                
+                email = row[0] if len(row) > 0 else ''
+                password = row[1] if len(row) > 1 else ''
+                c_column = row[2] if len(row) > 2 else ''
+                h_value_str = row[7] if len(row) > 7 else ''
+                i_time = row[8] if len(row) > 8 else ''
+                
+                if not email or not h_value_str or not i_time:
+                    continue
+                
+                try:
+                    h_value = int(h_value_str)
+                except (ValueError, TypeError):
+                    continue
+                
+                # For daily summary: check only H <= 0, ignore time comparison
+                if h_value <= 0:
+                    alert = {
+                        'row_index': idx,
+                        'email': email,
+                        'password': password,
+                        'c_column': c_column,
+                        'expiry_time': i_time,
+                        'days_remaining': h_value
+                    }
+                    alerts.append(alert)
+                    logger.info(f"Daily summary: row {idx}: {email}, H={h_value}, Time={i_time}")
+            
+            logger.info(f"Found {len(alerts)} expired accounts for daily summary")
+            return alerts
+            
+        except Exception as error:
+            logger.error(f"Error checking for daily summary: {error}")
+            return []
+    
     def format_alert_message(self, alert: Dict[str, any]) -> str:
         email = alert['email']
         password = alert['password']
@@ -75,6 +126,42 @@ class AlertManager:
         message += f"Email: `{email}`\n"
         message += f"Password: `{password}`\n"
         message += f"Giờ hết hạn: {expiry_time}"
+        
+        return message
+    
+    def format_daily_summary_message(self, alerts: List[Dict[str, any]]) -> str:
+        """Format daily summary message with all expired accounts"""
+        if not alerts:
+            return "📊 Daily Summary (7:00 AM)\n\n✅ No expired accounts today!"
+        
+        current_date = datetime.now(TIMEZONE).strftime('%Y-%m-%d')
+        message = f"📊 Daily Summary - {current_date}\n"
+        message += f"Total expired accounts: {len(alerts)}\n"
+        message += "=" * 30 + "\n\n"
+        
+        # Group by type (Copilot vs 365)
+        copilot_alerts = []
+        office_alerts = []
+        
+        for alert in alerts:
+            c_column = alert.get('c_column', '').lower()
+            if 'copilot' in c_column:
+                copilot_alerts.append(alert)
+            else:
+                office_alerts.append(alert)
+        
+        # Add Copilot section
+        if copilot_alerts:
+            message += f"🤖 Copilot Accounts ({len(copilot_alerts)}):\n"
+            for alert in copilot_alerts:
+                message += f"• `{alert['email']}` - Expires: {alert['expiry_time']}\n"
+            message += "\n"
+        
+        # Add Office 365 section
+        if office_alerts:
+            message += f"📦 Office 365 Accounts ({len(office_alerts)}):\n"
+            for alert in office_alerts:
+                message += f"• `{alert['email']}` - Expires: {alert['expiry_time']}\n"
         
         return message
     

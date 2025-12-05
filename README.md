@@ -5,6 +5,8 @@ A Telegram bot that monitors Google Sheets for expiring items and sends automati
 ## Features
 
 - Automated monitoring every 15 minutes
+- **Daily summary at 7:00 AM** - Get a complete list of all expired accounts (H <= 0) to focus on for the day
+- **Quiet hours (22:30 PM - 7:00 AM)** - No alerts sent during night time to avoid disturbances
 - Google Sheets integration
 - Telegram alerts with formatted messages
 - Group whitelist management
@@ -275,24 +277,74 @@ Giờ hết hạn: 15:30:00
 - Alert title changes based on column C content
 - Emojis are only used in the message, not in code
 
+### Daily Summary Format
+
+**Sent every day at 7:00 AM UTC+7:**
+```
+📊 Daily Summary - 2025-12-05
+Total expired accounts: 5
+==============================
+
+🤖 Copilot Accounts (2):
+• user1@example.com - Expires: 14:30:00
+• user2@example.com - Expires: 16:45:00
+
+📦 Office 365 Accounts (3):
+• user3@example.com - Expires: 09:15:00
+• user4@example.com - Expires: 11:20:00
+• user5@example.com - Expires: 18:00:00
+```
+
+- Shows all accounts where H <= 0 (regardless of time)
+- Grouped by account type (Copilot vs Office 365)
+- Helps teams plan their day and prioritize renewals
+
+## Quiet Hours
+
+The bot respects quiet hours to avoid disturbing users during night time:
+
+- **Quiet Period:** 22:30 PM (10:30 PM) to 7:00 AM (UTC+7)
+- **Behavior:** Regular 15-minute alert checks are skipped during this time
+- **Daily Summary:** Still sent at 7:00 AM (marks the end of quiet hours)
+- **Logging:** All skipped checks are logged for monitoring
+- **Manual Commands:** `/check`, `/renew`, and reply "done" still work during quiet hours
+
+**Example:**
+- 22:25 PM - Alerts sent normally ✅
+- 22:30 PM - Quiet hours begin, alerts skipped 🌙
+- 11:00 PM - Check runs but no alerts sent (logged)
+- 3:00 AM - Check runs but no alerts sent (logged)
+- 7:00 AM - Daily summary sent, quiet hours end ☀️
+- 7:15 AM - Regular alerts resume ✅
+
 ## How It Works
 
 ### Monitoring Cycle
 
 1. **Every 15 minutes**, the bot automatically:
-   - Reads data from Google Sheet (columns A, B, C, G, H, I)
-   - Checks each row for alert condition: `H <= 0` AND `I < current_time`
-   - Determines alert type based on column C (Copilot or 365)
-   - Sends alerts to all whitelisted groups
-   - Tracks alert message IDs for reply handling
+   - Checks if current time is within quiet hours (22:30 PM - 7:00 AM)
+   - If in quiet hours, skips sending alerts (logs the skip)
+   - If not in quiet hours, proceeds with normal checks:
+     - Reads data from Google Sheet (columns A, B, C, G, H, I)
+     - Checks each row for alert condition: `H <= 0` AND `I < current_time`
+     - Determines alert type based on column C (Copilot or 365)
+     - Sends alerts to all whitelisted groups
+     - Tracks alert message IDs for reply handling
 
-2. **When user replies "done"**:
+2. **Every day at 7:00 AM UTC+7**, the bot sends a daily summary:
+   - Reads all rows from Google Sheet
+   - Collects all accounts where `H <= 0` (ignores time comparison)
+   - Groups accounts by type (Copilot vs Office 365)
+   - Sends formatted summary to all whitelisted groups
+   - Helps teams focus on what needs attention that day
+
+3. **When user replies "done"**:
    - Bot identifies which row the alert belongs to
    - Updates column G with current date (UTC+7)
    - Updates column I with current time (UTC+7)
    - Sends confirmation message
 
-3. **Manual renewal via `/renew`**:
+4. **Manual renewal via `/renew`**:
    - Bot finds the row with matching email
    - Updates columns G and I
    - Sends confirmation message
@@ -437,7 +489,9 @@ docker stats office-telegram-bot
 
 Logs include:
 - Bot startup and initialization
-- Alert checks and triggers
+- Alert checks and triggers (every 15 minutes)
+- Quiet hours skips (22:30 PM - 7:00 AM)
+- Daily summary checks (7:00 AM)
 - Command executions
 - Sheet updates
 - Errors and exceptions
@@ -462,6 +516,8 @@ Based on project requirements:
 - ✅ Google Sheet API integration
 - ✅ Check every 15 minutes (columns H and I)
 - ✅ Alert condition: H <= 0 AND I < current_time (UTC+7)
+- ✅ **Quiet hours (22:30 PM - 7:00 AM)**: No alerts sent during night time
+- ✅ **Daily summary at 7:00 AM**: All accounts with H <= 0 (regardless of time)
 - ✅ Dynamic alert titles based on column C (Copilot vs 365)
 - ✅ `/startmon` command for group whitelist
 - ✅ `/renew <email>` command for manual updates
